@@ -1,69 +1,60 @@
+#!/usr/bin/env python3
+"""
+relay_node.py — Toba
+Telecommunications & Relay Node
+MSc Advanced Drone Technology — Group Project
+
+What this node does:
+  1. Subscribes to both drone positions via MAVROS
+  2. Broadcasts positions on /swarm/pose_array
+  3. Monitors distance between UAV0 and UAV1
+  4. Publishes alerts to /net/alerts
+  5. Publishes health status to /diagnostics
+"""
+
+import math
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-from px4_msgs.msg import VehicleLocalPosition
-from geometry_msgs.msg import PoseArray, Pose
+from geometry_msgs.msg import PoseStamped, PoseArray, Pose
 from std_msgs.msg import String
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
-import math
 
-# ─────────────────────────────────────────────────────
-#  Toba – Telecommunications & Relay Node
-#  MSc Advanced Drone Technology – Group Project
-#
-#  This node:
-#  1. Subscribes to both drone positions from PX4
-#  2. Broadcasts positions on /swarm/pose_array
-#     so drones know each other's location
-#  3. Monitors distance between UAV1 and UAV2
-#  4. Publishes alerts to /net/alerts
-#  5. Publishes health status to /diagnostics
-#
-#  Peter's specs:
-#  - 3.47m corridor width between drone lanes
-#  - 2.0m minimum safe separation
-#  - 2.0m soft geofence buffer
-#  - 0.5m hard geofence
-# ─────────────────────────────────────────────────────
-
-CORRIDOR_WIDTH   = 3.47   # metres
-MIN_SAFE_GAP     = 2.0    # metres — Peter's minimum separation
+# ── Mission parameters (from Peter's specs) ──────────────
+CORRIDOR_WIDTH   = 3.47   # metres between drone lanes
+MIN_SAFE_GAP     = 2.0    # metres — minimum safe separation
 SOFT_BUFFER      = 2.0    # metres — slow down zone
 HARD_GEOFENCE    = 0.5    # metres — return to home
-COMM_RANGE_LIMIT = 50.0   # metres — simulated max comms distance
+COMM_RANGE_LIMIT = 50.0   # metres — simulated max comms range
+
+# UAV0 hovers at 30m, UAV1 orbits at 100m
+# Natural altitude separation = 70m — already safe
+UAV0_ALT = 30.0
+UAV1_ALT = 100.0
 
 
 class RelayNode(Node):
     def __init__(self):
         super().__init__('relay_node')
 
-        # QoS to match PX4 publishers
-        qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1
-        )
-
-        # Position storage
+        # Position storage — start as None until first message arrives
+        self.uav0_pos = None
         self.uav1_pos = None
-        self.uav2_pos = None
 
-        # ── Subscribers ──────────────────────────────────
+        # ── Subscribers (MAVROS topics) ───────────────────
+        self.sub_uav0 = self.create_subscription(
+            PoseStamped,
+            '/uav0/mavros/local_position/pose',
+            self.uav0_callback,
+            10
+        )
         self.sub_uav1 = self.create_subscription(
-            VehicleLocalPosition,
-            '/px4_1/fmu/out/vehicle_local_position',
+            PoseStamped,
+            '/uav1/mavros/local_position/pose',
             self.uav1_callback,
-            qos
-        )
-        self.sub_uav2 = self.create_subscription(
-            VehicleLocalPosition,
-            '/px4_2/fmu/out/vehicle_local_position',
-            self.uav2_callback,
-            qos
+            10
         )
 
-        # ── Publishers ───────────────────────────────────
+        # ── Publishers ────────────────────────────────────
         self.pose_pub = self.create_publisher(
             PoseArray, '/swarm/pose_array', 10)
 
@@ -73,74 +64,79 @@ class RelayNode(Node):
         self.diag_pub = self.create_publisher(
             DiagnosticArray, '/diagnostics', 10)
 
-        # 10Hz timer
+        # ── 10Hz timer ────────────────────────────────────
         self.timer = self.create_timer(0.1, self.timer_callback)
 
         self.get_logger().info(
-            '========================================\n'
-            '  Relay Node Started — Toba\n'
-            '  Monitoring UAV1 and UAV2 positions\n'
-            '  Corridor width : 3.47m\n'
-            '  Min safe gap   : 2.0m\n'
-            '  Comm range     : 50.0m\n'
-            '========================================'
+            '\n========================================'
+            '\n  Relay Node Started — Toba'
+            '\n  Listening on MAVROS topics:'
+            '\n  /uav0/mavros/local_position/pose'
+            '\n  /uav1/mavros/local_position/pose'
+            '\n  Publishing to /swarm/pose_array'
+            '\n  Min safe gap   : 2.0m'
+            '\n  Comm range     : 50.0m'
+            '\n========================================'
         )
 
-    # ── Position callbacks ───────────────────────────────
+    def uav0_callback(self, msg):
+        """Receives UAV0 position (hovering at 30m)"""
+        self.uav0_pos = msg
+
     def uav1_callback(self, msg):
+        """Receives UAV1 position (orbiting at 100m)"""
         self.uav1_pos = msg
 
-    def uav2_callback(self, msg):
-        self.uav2_pos = msg
-
-    # ── Main 10Hz loop ───────────────────────────────────
     def timer_callback(self):
         self.broadcast_positions()
 
-        if self.uav1_pos is not None and self.uav2_pos is not None:
-            distance = self.get_distance(self.uav1_pos, self.uav2_pos)
+        if self.uav0_pos is not None and self.uav1_pos is not None:
+            distance = self.get_distance(self.uav0_pos, self.uav1_pos)
             self.check_comm_range(distance)
             self.check_separation(distance)
             self.publish_diagnostics(distance)
         else:
+            missing = []
+            if self.uav0_pos is None:
+                missing.append('UAV0')
+            if self.uav1_pos is None:
+                missing.append('UAV1')
             self.get_logger().info(
-                'Waiting for drone positions...',
+                f'Waiting for position from: {", ".join(missing)}',
                 throttle_duration_sec=3.0
             )
 
-    # ── Broadcast both positions on /swarm/pose_array ────
     def broadcast_positions(self):
         msg = PoseArray()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'map'
 
+        if self.uav0_pos is not None:
+            p0 = Pose()
+            p0.position.x = self.uav0_pos.pose.position.x
+            p0.position.y = self.uav0_pos.pose.position.y
+            p0.position.z = self.uav0_pos.pose.position.z
+            msg.poses.append(p0)
+
         if self.uav1_pos is not None:
             p1 = Pose()
-            p1.position.x = float(self.uav1_pos.x)
-            p1.position.y = float(self.uav1_pos.y)
-            p1.position.z = float(self.uav1_pos.z)
+            p1.position.x = self.uav1_pos.pose.position.x
+            p1.position.y = self.uav1_pos.pose.position.y
+            p1.position.z = self.uav1_pos.pose.position.z
             msg.poses.append(p1)
-
-        if self.uav2_pos is not None:
-            p2 = Pose()
-            p2.position.x = float(self.uav2_pos.x)
-            p2.position.y = float(self.uav2_pos.y)
-            p2.position.z = float(self.uav2_pos.z)
-            msg.poses.append(p2)
 
         self.pose_pub.publish(msg)
 
-    # ── Check communication range ────────────────────────
     def check_comm_range(self, distance):
         if distance > COMM_RANGE_LIMIT:
             self.publish_alert(
-                f'COMM_LOSS: UAV1-UAV2 distance={distance:.1f}m '
+                f'COMM_LOSS: UAV0-UAV1 distance={distance:.1f}m '
                 f'exceeds comm range={COMM_RANGE_LIMIT}m. '
                 f'Relay repositioning required.'
             )
         elif distance > COMM_RANGE_LIMIT * 0.8:
             self.publish_alert(
-                f'COMM_WARN: UAV1-UAV2 distance={distance:.1f}m '
+                f'COMM_WARN: UAV0-UAV1 distance={distance:.1f}m '
                 f'approaching comm limit={COMM_RANGE_LIMIT}m.'
             )
         else:
@@ -149,26 +145,22 @@ class RelayNode(Node):
                 throttle_duration_sec=5.0
             )
 
-    # ── Check Peter's 2m minimum separation ─────────────
     def check_separation(self, distance):
         if distance < MIN_SAFE_GAP:
             self.publish_alert(
-                f'SEPARATION_ALERT: UAV1-UAV2 only {distance:.2f}m apart! '
-                f'Minimum safe gap is {MIN_SAFE_GAP}m. '
-                f'Corridor width={CORRIDOR_WIDTH}m.'
+                f'SEPARATION_ALERT: UAV0-UAV1 only {distance:.2f}m apart! '
+                f'Minimum safe gap is {MIN_SAFE_GAP}m.'
             )
             self.get_logger().error(
                 f'DANGER: Drones too close! {distance:.2f}m < {MIN_SAFE_GAP}m'
             )
 
-    # ── Publish alert helper ─────────────────────────────
     def publish_alert(self, message):
         msg = String()
         msg.data = message
         self.alert_pub.publish(msg)
         self.get_logger().warn(message)
 
-    # ── Publish diagnostics ──────────────────────────────
     def publish_diagnostics(self, distance):
         diag_array = DiagnosticArray()
         diag_array.header.stamp = self.get_clock().now().to_msg()
@@ -188,29 +180,22 @@ class RelayNode(Node):
             status.message = 'Swarm communication healthy'
 
         status.values = [
-            KeyValue(key='uav1_uav2_distance_m',
-                     value=f'{distance:.2f}'),
-            KeyValue(key='corridor_width_m',
-                     value=str(CORRIDOR_WIDTH)),
-            KeyValue(key='min_safe_gap_m',
-                     value=str(MIN_SAFE_GAP)),
-            KeyValue(key='comm_range_limit_m',
-                     value=str(COMM_RANGE_LIMIT)),
-            KeyValue(key='soft_buffer_m',
-                     value=str(SOFT_BUFFER)),
-            KeyValue(key='hard_geofence_m',
-                     value=str(HARD_GEOFENCE)),
+            KeyValue(key='uav0_uav1_distance_m', value=f'{distance:.2f}'),
+            KeyValue(key='uav0_altitude_m',       value=str(UAV0_ALT)),
+            KeyValue(key='uav1_altitude_m',       value=str(UAV1_ALT)),
+            KeyValue(key='corridor_width_m',      value=str(CORRIDOR_WIDTH)),
+            KeyValue(key='min_safe_gap_m',        value=str(MIN_SAFE_GAP)),
+            KeyValue(key='comm_range_limit_m',    value=str(COMM_RANGE_LIMIT)),
         ]
 
         diag_array.status.append(status)
         self.diag_pub.publish(diag_array)
 
-    # ── Distance calculation ─────────────────────────────
     def get_distance(self, pos1, pos2):
         return math.sqrt(
-            (pos1.x - pos2.x) ** 2 +
-            (pos1.y - pos2.y) ** 2 +
-            (pos1.z - pos2.z) ** 2
+            (pos1.pose.position.x - pos2.pose.position.x) ** 2 +
+            (pos1.pose.position.y - pos2.pose.position.y) ** 2 +
+            (pos1.pose.position.z - pos2.pose.position.z) ** 2
         )
 
 

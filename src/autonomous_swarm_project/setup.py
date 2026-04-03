@@ -1,9 +1,7 @@
 from setuptools import find_packages, setup
 import os
 from glob import glob
-
 package_name = 'autonomous_swarm_project'
-
 setup(
     name=package_name,
     version='0.0.0',
@@ -12,7 +10,6 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        # This allows ROS 2 to find your YAML waypoints after installation
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
@@ -31,7 +28,9 @@ setup(
             'mission_generator = autonomous_swarm_project.gen_waypoints:main',
             'mission_executor = autonomous_swarm_project.mission_executor:main',
             'image_logger = autonomous_swarm_project.image_logger:main',
-	    'relay_node = autonomous_swarm_project.relay_node:main',
+            'relay_node = autonomous_swarm_project.relay_node:main',
+            'comms_resilience_node = autonomous_swarm_project.comms_resilience_node:main',
+            'cyber_defence_node = autonomous_swarm_project.cyber_defence_node:main',
         ],
     },
 )
