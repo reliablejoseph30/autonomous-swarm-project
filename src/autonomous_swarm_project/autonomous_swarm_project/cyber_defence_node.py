@@ -89,15 +89,15 @@ class CyberDefenceNode(Node):
         # ── Subscribers ───────────────────────────────────
         self.sub_uav0 = self.create_subscription(
             PoseStamped,
-            '/uav0/mavros/local_position/pose',
+            '/uav0/local_position/pose',
             self.uav0_callback,
-            10
+            QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         )
         self.sub_uav1 = self.create_subscription(
             PoseStamped,
-            '/uav1/mavros/local_position/pose',
+            '/uav1/local_position/pose',
             self.uav1_callback,
-            10
+            QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         )
 
         # Monitor the shared pose array for fake broadcasts

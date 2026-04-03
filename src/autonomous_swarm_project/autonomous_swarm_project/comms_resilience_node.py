@@ -21,6 +21,7 @@ import math
 import time
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from geometry_msgs.msg import PoseStamped, PoseArray
 from std_msgs.msg import String, Float32
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
@@ -68,15 +69,15 @@ class CommsResilienceNode(Node):
         # ── Subscribers ───────────────────────────────────
         self.sub_uav0 = self.create_subscription(
             PoseStamped,
-            '/uav0/mavros/local_position/pose',
+            '/uav0/local_position/pose',
             self.uav0_callback,
-            10
+            QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         )
         self.sub_uav1 = self.create_subscription(
             PoseStamped,
-            '/uav1/mavros/local_position/pose',
+            '/uav1/local_position/pose',
             self.uav1_callback,
-            10
+            QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         )
 
         # ── Publishers ────────────────────────────────────
