@@ -15,6 +15,7 @@ What this node does:
 import math
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from geometry_msgs.msg import PoseStamped, PoseArray, Pose
 from std_msgs.msg import String
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
@@ -40,18 +41,25 @@ class RelayNode(Node):
         self.uav0_pos = None
         self.uav1_pos = None
 
+        # QoS to match MAVROS publisher (BEST_EFFORT)
+        qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         # ── Subscribers (MAVROS topics) ───────────────────
         self.sub_uav0 = self.create_subscription(
             PoseStamped,
-            '/uav0/mavros/local_position/pose',
+            '/uav0/local_position/pose',
             self.uav0_callback,
-            10
+            qos
         )
         self.sub_uav1 = self.create_subscription(
             PoseStamped,
-            '/uav1/mavros/local_position/pose',
+            '/uav1/local_position/pose',
             self.uav1_callback,
-            10
+            qos
         )
 
         # ── Publishers ────────────────────────────────────
@@ -71,8 +79,8 @@ class RelayNode(Node):
             '\n========================================'
             '\n  Relay Node Started — Toba'
             '\n  Listening on MAVROS topics:'
-            '\n  /uav0/mavros/local_position/pose'
-            '\n  /uav1/mavros/local_position/pose'
+            '\n  /uav0/local_position/pose'
+            '\n  /uav1/local_position/pose'
             '\n  Publishing to /swarm/pose_array'
             '\n  Min safe gap   : 2.0m'
             '\n  Comm range     : 50.0m'
