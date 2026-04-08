@@ -89,7 +89,7 @@ Notes
 Maintainer
 ------------------------------------------------------------
 
-Peter the Navigator
+Peter, Connor,Craig
 =======
 # autonomous-swarm-project
 MSc Advanced Drone Technology - Autonomous Multi-Drone Swarm Group Project
