@@ -35,7 +35,7 @@ Monitors link health, detects weather degradation, BVLOS occlusion, and anti-col
 **What it does:**
 - Measures message arrival rate (Hz) as a proxy for weather/signal degradation
 - Classifies link condition: `CLEAR` (>90%) · `BREEZE` (70–90%) · `RAIN` (50–70%) · `STORM` (<50%)
-- Heartbeat timeout — if no message arrives for 2 seconds after a healthy link, raises `OCCLUSION_ALERT` (drone behind obstacle; BVLOS)
+- Heartbeat timeout; if no message arrives for 2 seconds after a healthy link, raises `OCCLUSION_ALERT` (drone behind obstacle; BVLOS)
 - Anti-collision monitoring: `WARNING` at 10m, `DANGER` at 5m separation
 - Publishes link health scores (0.0-1.0) per drone on `/comms/uav0/health` and `/comms/uav1/health`
 
@@ -50,7 +50,7 @@ Defends against Craig's cyber attacks in real time.
 |---|---|
 | Packet loss injection | Detects sudden message rate drop after healthy link |
 | Communication jamming | Detects total silence after healthy link (3s timeout) |
-| Position spoofing | Physics check — rejects positions requiring speed >30 m/s |
+| Position spoofing | Physics check - rejects positions requiring speed >30 m/s |
 | Topic flooding (DoS) | Flags any topic arriving at >50 Hz |
 | Fake position broadcasts | Cross-checks `/swarm/pose_array` against MAVROS ground truth |
 
@@ -206,6 +206,6 @@ Confirmed working on 14 April 2026 with live drones flying in Gazebo Baylands wo
 
 ## Author
 
-**Toba (Joseph)** — MSc Advanced Drone Technology
+**Toba (Joseph)** - MSc Advanced Drone Technology
 University of the West of Scotland
 April 2026
