@@ -1,5 +1,5 @@
-# Autonomous Swarm Project — Toba's Nodes
-**MSc Advanced Drone Technology — University of the West of Scotland**
+# Autonomous Swarm Project - Toba's Nodes
+**MSc Advanced Drone Technology - University of the West of Scotland**
 **Role: Telecommunications · Comms Resilience · Cyber Defence · Anti-Collision**
 
 ---
@@ -9,14 +9,14 @@
 This repository contains three ROS2 nodes built by Toba (Joseph) for the autonomous multi-drone swarm project. The nodes handle all communications, resilience, and cyber security aspects of the swarm.
 
 The swarm consists of two drones operating in the Gazebo Classic Baylands simulation:
-- **UAV0** — Iris multirotor, hovers at 30m AGL inspecting a red target box at (30, 20, 0)
-- **UAV1** — Standard VTOL, orbits a 100m radius survey pattern at 100m AGL
+- **UAV0** - Iris multirotor, hovers at 30m AGL inspecting a red target box at (30, 20, 0)
+- **UAV1** - Standard VTOL, orbits a 100m radius survey pattern at 100m AGL
 
 ---
 
 ## Toba's Three Nodes
 
-### 1. relay_node.py — Telecommunications Relay
+### 1. relay_node.py ; Telecommunications Relay
 Subscribes to both drone positions via MAVROS and rebroadcasts them on `/swarm/pose_array` so the entire swarm always knows where each drone is.
 
 **What it does:**
@@ -29,19 +29,19 @@ Subscribes to both drone positions via MAVROS and rebroadcasts them on `/swarm/p
 
 ---
 
-### 2. comms_resilience_node.py — Communications Resilience
+### 2. comms_resilience_node.py ; Communications Resilience
 Monitors link health, detects weather degradation, BVLOS occlusion, and anti-collision.
 
 **What it does:**
 - Measures message arrival rate (Hz) as a proxy for weather/signal degradation
 - Classifies link condition: `CLEAR` (>90%) · `BREEZE` (70–90%) · `RAIN` (50–70%) · `STORM` (<50%)
-- Heartbeat timeout — if no message arrives for 2 seconds after a healthy link, raises `OCCLUSION_ALERT` (drone behind obstacle — BVLOS)
+- Heartbeat timeout — if no message arrives for 2 seconds after a healthy link, raises `OCCLUSION_ALERT` (drone behind obstacle; BVLOS)
 - Anti-collision monitoring: `WARNING` at 10m, `DANGER` at 5m separation
-- Publishes link health scores (0.0–1.0) per drone on `/comms/uav0/health` and `/comms/uav1/health`
+- Publishes link health scores (0.0-1.0) per drone on `/comms/uav0/health` and `/comms/uav1/health`
 
 ---
 
-### 3. cyber_defence_node.py — Cyber Defence
+### 3. cyber_defence_node.py; Cyber Defence
 Defends against Craig's cyber attacks in real time.
 
 **Attack detection:**
@@ -55,7 +55,7 @@ Defends against Craig's cyber attacks in real time.
 | Fake position broadcasts | Cross-checks `/swarm/pose_array` against MAVROS ground truth |
 
 **Additional:**
-- HMAC signing framework — Craig cannot forge messages without the shared secret key
+- HMAC signing framework; Craig cannot forge messages without the shared secret key
 - Publishes threat level (`SAFE` / `WARNING` / `CRITICAL`) to `/cyber/status`
 - Publishes attack-specific alerts to `/cyber/alerts`
 
@@ -90,8 +90,8 @@ A live web dashboard (`swarm_ops_dashboard.html`) that reads from ROS2 topics an
 | `/net/alerts` | String | Shared swarm alert bus |
 | `/cyber/alerts` | String | Attack-specific alerts |
 | `/cyber/status` | String | Current threat level |
-| `/comms/uav0/health` | Float32 | UAV0 link quality (0–1) |
-| `/comms/uav1/health` | Float32 | UAV1 link quality (0–1) |
+| `/comms/uav0/health` | Float32 | UAV0 link quality (0-1) |
+| `/comms/uav1/health` | Float32 | UAV1 link quality (0-1) |
 | `/diagnostics` | DiagnosticArray | Node health status |
 
 ---
@@ -120,44 +120,44 @@ source install/setup.bash
 
 ### Full launch sequence
 
-**Terminal 1 — Launch swarm:**
+**Terminal 1; Launch swarm:**
 ```bash
 swarm
 ```
 
-**Terminal 2 — Fly the drones:**
+**Terminal 2; Fly the drones:**
 ```bash
 cd ~/swarm_lab && python3 swarm_mission.py
 ```
 
-**Terminal 3 — relay_node:**
+**Terminal 3; relay_node:**
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/ros2_ws/install/setup.bash
 ros2 run autonomous_swarm_project relay_node
 ```
 
-**Terminal 4 — comms_resilience_node:**
+**Terminal 4; comms_resilience_node:**
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/ros2_ws/install/setup.bash
 ros2 run autonomous_swarm_project comms_resilience_node
 ```
 
-**Terminal 5 — cyber_defence_node:**
+**Terminal 5; cyber_defence_node:**
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/ros2_ws/install/setup.bash
 ros2 run autonomous_swarm_project cyber_defence_node
 ```
 
-**Terminal 6 — Watch live alerts:**
+**Terminal 6; Watch live alerts:**
 ```bash
 source /opt/ros/humble/setup.bash
 ros2 topic echo /net/alerts
 ```
 
-**Terminal 7 — Live dashboard bridge:**
+**Terminal 7; Live dashboard bridge:**
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/ros2_ws/install/setup.bash
