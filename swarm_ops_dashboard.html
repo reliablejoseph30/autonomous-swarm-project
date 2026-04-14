@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swarm Ops Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+
+  :root {
+    --bg:       #050d14;
+    --panel:    #0a1a28;
+    --border:   #0d3352;
+    --cyan:     #00d4ff;
+    --green:    #00ff88;
+    --orange:   #ff9500;
+    --red:      #ff3344;
+    --yellow:   #ffe033;
+    --dim:      #4a7a9b;
+    --text:     #c8e8f8;
+    --mono:     'Share Tech Mono', monospace;
+    --ui:       'Rajdhani', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--ui);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(90deg, #020c16, #0a1a28, #020c16);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    border: 2px solid var(--cyan);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 6px var(--cyan); }
+    50% { box-shadow: 0 0 18px var(--cyan), 0 0 30px rgba(0,212,255,0.3); }
+  }
+
+  .logo-text { font-size: 20px; font-weight: 700; letter-spacing: 3px; color: var(--cyan); }
+  .logo-sub  { font-size: 11px; color: var(--dim); letter-spacing: 2px; margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 24px; }
+
+  .clock {
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--cyan);
+    letter-spacing: 2px;
+  }
+
+  .uptime {
+    font-size: 12px;
+    color: var(--dim);
+    letter-spacing: 1px;
+    text-align: right;
+  }
+
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Grid layout ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  /* ── Panel base ── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    opacity: 0.5;
+  }
+
+  .panel-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  /* ── UAV panels ── */
+  .uav-panel { grid-column: span 1; }
+
+  .uav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .uav-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--cyan);
+  }
+
+  .uav-type {
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 1px;
+  }
+
+  .uav-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    background: rgba(0,212,255,0.1);
+    border: 1px solid var(--border);
+    color: var(--cyan);
+  }
+
+  .coords {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .coord-box {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 8px;
+    text-align: center;
+  }
+
+  .coord-label {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+
+  .coord-value {
+    font-family: var(--mono);
+    font-size: 20px;
+    color: var(--green);
+    font-weight: 400;
+  }
+
+  .coord-unit { font-size: 10px; color: var(--dim); }
+
+  .rate-bar-container {
+    margin-top: 4px;
+  }
+
+  .rate-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 4px;
+  }
+
+  .rate-val { color: var(--cyan); font-family: var(--mono); }
+
+  .bar-track {
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--cyan);
+    transition: width 0.5s ease;
+    box-shadow: 0 0 6px var(--cyan);
+  }
+
+  /* ── Distance panel ── */
+  .distance-panel { grid-column: span 1; }
+
+  .big-number {
+    font-family: var(--mono);
+    font-size: 52px;
+    line-height: 1;
+    color: var(--cyan);
+    text-shadow: 0 0 20px rgba(0,212,255,0.4);
+    transition: color 0.3s;
+  }
+
+  .big-unit { font-size: 14px; color: var(--dim); margin-left: 4px; }
+
+  .distance-note {
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 6px;
+    letter-spacing: 1px;
+  }
+
+  .distance-warn { color: var(--orange); text-shadow: 0 0 8px var(--orange); }
+  .distance-danger { color: var(--red); text-shadow: 0 0 8px var(--red); animation: flash 0.5s ease-in-out infinite; }
+
+  @keyframes flash { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Comm status ── */
+  .comm-panel { grid-column: span 1; }
+
+  .status-badge {
+    display: inline-block;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    padding: 10px 20px;
+    border-radius: 3px;
+    margin-bottom: 12px;
+    transition: all 0.3s;
+  }
+
+  .status-CLEAR   { color: var(--green);  background: rgba(0,255,136,0.08);  border: 1px solid var(--green);  box-shadow: 0 0 12px rgba(0,255,136,0.2); }
+  .status-BREEZE  { color: var(--cyan);   background: rgba(0,212,255,0.08);  border: 1px solid var(--cyan); }
+  .status-RAIN    { color: var(--yellow); background: rgba(255,224,51,0.08); border: 1px solid var(--yellow); }
+  .status-STORM   { color: var(--red);    background: rgba(255,51,68,0.08);  border: 1px solid var(--red);    box-shadow: 0 0 12px rgba(255,51,68,0.3); }
+  .status-WAITING { color: var(--dim);    background: rgba(74,122,155,0.08); border: 1px solid var(--border); }
+
+  .health-bars { margin-top: 10px; }
+  .health-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .health-label { font-size: 11px; color: var(--dim); width: 38px; letter-spacing: 1px; }
+  .health-track { flex: 1; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+  .health-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .health-val { font-family: var(--mono); font-size: 11px; color: var(--text); width: 32px; text-align: right; }
+
+  /* ── Threat panel ── */
+  .threat-panel { grid-column: span 1; }
+
+  .threat-badge {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    padding: 12px 24px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: 10px;
+    transition: all 0.3s;
+  }
+
+  .threat-SAFE     { color: var(--green); background: rgba(0,255,136,0.08); border: 1px solid var(--green); box-shadow: 0 0 12px rgba(0,255,136,0.15); }
+  .threat-WARNING  { color: var(--orange); background: rgba(255,149,0,0.08); border: 1px solid var(--orange); box-shadow: 0 0 12px rgba(255,149,0,0.3); animation: flash 1s ease-in-out infinite; }
+  .threat-CRITICAL { color: var(--red); background: rgba(255,51,68,0.1); border: 1px solid var(--red); box-shadow: 0 0 20px rgba(255,51,68,0.4); animation: flash 0.4s ease-in-out infinite; }
+  .threat-WAITING  { color: var(--dim); background: rgba(74,122,155,0.08); border: 1px solid var(--border); }
+
+  .threat-desc { font-size: 12px; color: var(--dim); letter-spacing: 1px; }
+
+  /* ── Mission status ── */
+  .mission-panel { grid-column: span 1; }
+
+  .mission-status {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--cyan);
+    margin-bottom: 14px;
+  }
+
+  .mission-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(13,51,82,0.5);
+    font-size: 12px;
+  }
+
+  .mission-key { color: var(--dim); letter-spacing: 1px; }
+  .mission-val { font-family: var(--mono); color: var(--text); }
+
+  /* ── Alerts panel ── */
+  .alerts-panel { grid-column: span 3; }
+
+  .alerts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .alerts-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  .alert-feed {
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .alert-feed::-webkit-scrollbar { width: 4px; }
+  .alert-feed::-webkit-scrollbar-track { background: transparent; }
+  .alert-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .alert-item {
+    display: flex;
+    gap: 12px;
+    padding: 6px 8px;
+    margin-bottom: 3px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 11px;
+    animation: slide-in 0.3s ease;
+    background: rgba(0,0,0,0.2);
+    border-left: 2px solid var(--border);
+  }
+
+  @keyframes slide-in { from { opacity:0; transform: translateX(-8px); } to { opacity:1; transform:none; } }
+
+  .alert-time { color: var(--dim); flex-shrink: 0; }
+  .alert-text { color: var(--text); word-break: break-all; }
+
+  .alert-item.comm   { border-left-color: var(--orange); }
+  .alert-item.cyber  { border-left-color: var(--red); }
+  .alert-item.sep    { border-left-color: var(--yellow); }
+  .alert-item.ok     { border-left-color: var(--green); }
+
+  .no-alerts { color: var(--dim); font-size: 12px; font-family: var(--mono); padding: 8px; }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 10px;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">✈</div>
+    <div>
+      <div class="logo-text">SWARM OPS</div>
+      <div class="logo-sub">AUTONOMOUS MULTI-DRONE COMMAND</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div>
+      <div class="uptime" id="uptime">UPTIME: --</div>
+      <div class="uptime">MSc ADVANCED DRONE TECHNOLOGY — UWS</div>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="status-dot" id="status-dot"></div>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- UAV0 -->
+  <div class="panel uav-panel">
+    <div class="panel-title">UAV0 — IRIS MULTIROTOR</div>
+    <div class="uav-header">
+      <div>
+        <div class="uav-name">UAV0</div>
+        <div class="uav-type">INSPECTION · 30M AGL · 47° FOV</div>
+      </div>
+      <div class="uav-badge" id="uav0-badge">OFFLINE</div>
+    </div>
+    <div class="coords">
+      <div class="coord-box">
+        <div class="coord-label">X</div>
+        <div class="coord-value" id="uav0-x">--</div>
+        <div class="coord-unit">m</div>
+      </div>
+      <div class="coord-box">
+        <div class="coord-label">Y</div>
+        <div class="coord-value" id="uav0-y">--</div>
+        <div class="coord-unit">m</div>
+      </div>
+      <div class="coord-box">
+        <div class="coord-label">ALT</div>
+        <div class="coord-value" id="uav0-z">--</div>
+        <div class="coord-unit">m</div>
+      </div>
+    </div>
+    <div class="rate-bar-container">
+      <div class="rate-label">
+        <span>MSG RATE</span>
+        <span class="rate-val"><span id="uav0-rate">0</span> Hz</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" id="uav0-bar" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UAV1 -->
+  <div class="panel uav-panel">
+    <div class="panel-title">UAV1 — STANDARD VTOL</div>
+    <div class="uav-header">
+      <div>
+        <div class="uav-name">UAV1</div>
+        <div class="uav-type">SURVEY · 100M AGL · 100° FOV</div>
+      </div>
+      <div class="uav-badge" id="uav1-badge">OFFLINE</div>
+    </div>
+    <div class="coords">
+      <div class="coord-box">
+        <div class="coord-label">X</div>
+        <div class="coord-value" id="uav1-x">--</div>
+        <div class="coord-unit">m</div>
+      </div>
+      <div class="coord-box">
+        <div class="coord-label">Y</div>
+        <div class="coord-value" id="uav1-y">--</div>
+        <div class="coord-unit">m</div>
+      </div>
+      <div class="coord-box">
+        <div class="coord-label">ALT</div>
+        <div class="coord-value" id="uav1-z">--</div>
+        <div class="coord-unit">m</div>
+      </div>
+    </div>
+    <div class="rate-bar-container">
+      <div class="rate-label">
+        <span>MSG RATE</span>
+        <span class="rate-val"><span id="uav1-rate">0</span> Hz</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" id="uav1-bar" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Distance -->
+  <div class="panel distance-panel">
+    <div class="panel-title">DRONE SEPARATION</div>
+    <div>
+      <span class="big-number" id="distance">--</span>
+      <span class="big-unit">m</span>
+    </div>
+    <div class="distance-note" id="distance-note">3D EUCLIDEAN DISTANCE</div>
+    <div style="margin-top:14px">
+      <div class="rate-label" style="margin-bottom:6px">
+        <span>SEPARATION STATUS</span>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px">
+        <div style="font-size:11px; padding:3px 8px; border-radius:2px; background:rgba(0,255,136,0.1); border:1px solid var(--green); color:var(--green)">SAFE &gt;10m</div>
+        <div style="font-size:11px; padding:3px 8px; border-radius:2px; background:rgba(255,224,51,0.1); border:1px solid var(--yellow); color:var(--yellow)">WARN &lt;10m</div>
+        <div style="font-size:11px; padding:3px 8px; border-radius:2px; background:rgba(255,51,68,0.1); border:1px solid var(--red); color:var(--red)">DANGER &lt;5m</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comm status -->
+  <div class="panel comm-panel">
+    <div class="panel-title">COMMS LINK HEALTH</div>
+    <div class="status-badge status-WAITING" id="comm-badge">WAITING</div>
+    <div class="health-bars">
+      <div class="health-row">
+        <div class="health-label">UAV0</div>
+        <div class="health-track">
+          <div class="health-fill" id="h0-fill" style="width:0%; background:var(--cyan)"></div>
+        </div>
+        <div class="health-val" id="h0-val">0%</div>
+      </div>
+      <div class="health-row">
+        <div class="health-label">UAV1</div>
+        <div class="health-track">
+          <div class="health-fill" id="h1-fill" style="width:0%; background:var(--cyan)"></div>
+        </div>
+        <div class="health-val" id="h1-val">0%</div>
+      </div>
+    </div>
+    <div style="margin-top:10px; font-size:11px; color:var(--dim); letter-spacing:1px">
+      CLEAR ≥90% · BREEZE 70% · RAIN 50% · STORM &lt;50%
+    </div>
+  </div>
+
+  <!-- Threat -->
+  <div class="panel threat-panel">
+    <div class="panel-title">CYBER THREAT LEVEL</div>
+    <div class="threat-badge threat-WAITING" id="threat-badge">WAITING</div>
+    <div class="threat-desc" id="threat-desc">Monitoring for Craig's attacks...</div>
+    <div style="margin-top:14px; font-size:11px; color:var(--dim)">
+      <div style="margin-bottom:4px">● Packet loss injection</div>
+      <div style="margin-bottom:4px">● Communication jamming</div>
+      <div style="margin-bottom:4px">● Position spoofing</div>
+      <div style="margin-bottom:4px">● Topic flooding (DoS)</div>
+      <div>● Fake position broadcasts</div>
+    </div>
+  </div>
+
+  <!-- Mission -->
+  <div class="panel mission-panel">
+    <div class="panel-title">MISSION STATUS</div>
+    <div class="mission-status" id="mission-status">WAITING</div>
+    <div class="mission-row">
+      <span class="mission-key">UAV0 TARGET</span>
+      <span class="mission-val">HOLD (30, 20, 30m)</span>
+    </div>
+    <div class="mission-row">
+      <span class="mission-key">UAV1 PATTERN</span>
+      <span class="mission-val">ORBIT 100m RADIUS</span>
+    </div>
+    <div class="mission-row">
+      <span class="mission-key">UAV0 GSD</span>
+      <span class="mission-val">2.04 cm/px</span>
+    </div>
+    <div class="mission-row">
+      <span class="mission-key">UAV1 GSD</span>
+      <span class="mission-val">18.62 cm/px</span>
+    </div>
+    <div class="mission-row">
+      <span class="mission-key">COMM RANGE</span>
+      <span class="mission-val">50.0 m</span>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div class="panel alerts-panel">
+    <div class="alerts-header">
+      <div class="panel-title" style="margin-bottom:0">LIVE ALERT FEED — /net/alerts</div>
+      <div class="alerts-count" id="alerts-count">0 ALERTS</div>
+    </div>
+    <div class="alert-feed" id="alert-feed">
+      <div class="no-alerts">Waiting for alerts...</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  SWARM OPS DASHBOARD · TOBA (JOSEPH) · MSc ADVANCED DRONE TECHNOLOGY · UWS · 2026
+</footer>
+
+<script>
+  // Clock
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+      now.toTimeString().slice(0,8);
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // Fetch state from bridge
+  async function fetchState() {
+    try {
+      const res = await fetch('http://localhost:8765/state');
+      if (!res.ok) return;
+      const s = await res.json();
+      updateDashboard(s);
+      document.getElementById('status-dot').style.background = 'var(--green)';
+      document.getElementById('status-dot').style.boxShadow = '0 0 8px var(--green)';
+    } catch (e) {
+      document.getElementById('status-dot').style.background = 'var(--red)';
+      document.getElementById('status-dot').style.boxShadow = '0 0 8px var(--red)';
+    }
+  }
+
+  function updateDashboard(s) {
+    // Uptime
+    const u = s.uptime_s;
+    const m = Math.floor(u/60), sec = u%60;
+    document.getElementById('uptime').textContent = `UPTIME: ${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+
+    // UAV0
+    const u0 = s.uav0;
+    document.getElementById('uav0-x').textContent = u0.x;
+    document.getElementById('uav0-y').textContent = u0.y;
+    document.getElementById('uav0-z').textContent = u0.z;
+    document.getElementById('uav0-rate').textContent = u0.rate_hz;
+    document.getElementById('uav0-bar').style.width = Math.min(100, (u0.rate_hz/30)*100) + '%';
+    const b0 = document.getElementById('uav0-badge');
+    if (u0.rate_hz > 0) { b0.textContent = 'ONLINE'; b0.style.color='var(--green)'; b0.style.borderColor='var(--green)'; }
+    else { b0.textContent = 'OFFLINE'; b0.style.color='var(--dim)'; b0.style.borderColor='var(--border)'; }
+
+    // UAV1
+    const u1 = s.uav1;
+    document.getElementById('uav1-x').textContent = u1.x;
+    document.getElementById('uav1-y').textContent = u1.y;
+    document.getElementById('uav1-z').textContent = u1.z;
+    document.getElementById('uav1-rate').textContent = u1.rate_hz;
+    document.getElementById('uav1-bar').style.width = Math.min(100, (u1.rate_hz/30)*100) + '%';
+    const b1 = document.getElementById('uav1-badge');
+    if (u1.rate_hz > 0) { b1.textContent = 'ONLINE'; b1.style.color='var(--green)'; b1.style.borderColor='var(--green)'; }
+    else { b1.textContent = 'OFFLINE'; b1.style.color='var(--dim)'; b1.style.borderColor='var(--border)'; }
+
+    // Distance
+    const dist = s.distance_m;
+    const distEl = document.getElementById('distance');
+    const noteEl = document.getElementById('distance-note');
+    distEl.textContent = dist || '--';
+    distEl.className = 'big-number';
+    if (dist < 5)       { distEl.classList.add('distance-danger'); noteEl.textContent = '⚠ COLLISION DANGER'; noteEl.style.color='var(--red)'; }
+    else if (dist < 10) { distEl.classList.add('distance-warn');   noteEl.textContent = '⚠ SEPARATION WARNING'; noteEl.style.color='var(--orange)'; }
+    else                { noteEl.textContent = '3D EUCLIDEAN DISTANCE — SAFE'; noteEl.style.color='var(--dim)'; }
+
+    // Comm status
+    const cs = s.comm_status;
+    const cb = document.getElementById('comm-badge');
+    cb.textContent = cs;
+    cb.className = 'status-badge status-' + cs;
+
+    // Health bars
+    const h0 = Math.round(s.uav0_health * 100);
+    const h1 = Math.round(s.uav1_health * 100);
+    document.getElementById('h0-fill').style.width = h0 + '%';
+    document.getElementById('h1-fill').style.width = h1 + '%';
+    document.getElementById('h0-val').textContent = h0 + '%';
+    document.getElementById('h1-val').textContent = h1 + '%';
+
+    // Threat level
+    const tl = s.threat_level;
+    const tb = document.getElementById('threat-badge');
+    tb.textContent = tl;
+    tb.className = 'threat-badge threat-' + tl;
+    const descs = { SAFE: 'No attacks detected. All systems nominal.', WARNING: 'Suspicious activity detected. Monitoring closely.', CRITICAL: 'ACTIVE ATTACK DETECTED. Defences engaged.', WAITING: 'Monitoring for Craig\'s attacks...' };
+    document.getElementById('threat-desc').textContent = descs[tl] || '';
+
+    // Mission
+    document.getElementById('mission-status').textContent = s.mission_status;
+
+    // Alerts
+    const feed = document.getElementById('alert-feed');
+    document.getElementById('alerts-count').textContent = s.alerts.length + ' ALERTS';
+    if (s.alerts.length === 0) {
+      feed.innerHTML = '<div class="no-alerts">No alerts yet...</div>';
+    } else {
+      feed.innerHTML = s.alerts.map(a => {
+        let cls = '';
+        if (a.text.includes('COMM') || a.text.includes('OCCLUSION')) cls = 'comm';
+        else if (a.text.includes('CYBER') || a.text.includes('SPOOF') || a.text.includes('DOS') || a.text.includes('JAM')) cls = 'cyber';
+        else if (a.text.includes('SEPARATION') || a.text.includes('COLLISION')) cls = 'sep';
+        else if (a.text.includes('OK') || a.text.includes('SAFE')) cls = 'ok';
+        return `<div class="alert-item ${cls}"><span class="alert-time">${a.time}</span><span class="alert-text">${a.text}</span></div>`;
+      }).join('');
+    }
+  }
+
+  // Poll every second
+  setInterval(fetchState, 1000);
+  fetchState();
+</script>
+</body>
+</html>
