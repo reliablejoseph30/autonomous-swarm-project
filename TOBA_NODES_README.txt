@@ -1,4 +1,4 @@
-Toba's Nodes — Swarm Project
+Toba's Nodes - Swarm Project
 Telecoms, Comms Resilience & Cyber Defence
 ==========================================
 
