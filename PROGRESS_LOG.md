@@ -1,8 +1,8 @@
-# Autonomous Swarm Project — Progress Log
+# Autonomous Swarm Project - Progress Log
 
 ---
 
-## Session 1 — 23 March 2026
+## Session 1 - 23 March 2026
 **Lead:** Toba (Telecommunications & Relay Infrastructure)
 
 ---
@@ -31,7 +31,7 @@ sudo usermod -aG docker $USER
 sudo reboot
 ```
 
-#### 3. Docker Run Command (Full — use this every time from scratch)
+#### 3. Docker Run Command (Full - use this every time from scratch)
 ```bash
 xhost +local:docker
 
@@ -92,17 +92,17 @@ source install/setup.bash
 
 ### Launch Sequence (Use Every Time)
 
-#### Step 1 — On laptop terminal:
+#### Step 1 - On laptop terminal:
 ```bash
 xhost +local:docker
 docker start swarm_dev
 ```
 
-#### Step 2 — Open VSCode, attach to container:
+#### Step 2 - Open VSCode, attach to container:
 - Ctrl+Shift+P → "Attach to Running Container" → swarm_dev
 - Or on terminal: `docker exec -it swarm_dev bash`
 
-#### Step 3 — Terminal 1 (Gazebo):
+#### Step 3 - Terminal 1 (Gazebo):
 ```bash
 source /opt/ros/foxy/setup.bash
 source /usr/share/gazebo-11/setup.bash
@@ -114,14 +114,14 @@ cd /opt/PX4-Autopilot
 ./Tools/gazebo_sitl_multiple_run.sh -m iris -n 2
 ```
 
-#### Step 4 — Terminal 2 (Mission Executor):
+#### Step 4 - Terminal 2 (Mission Executor):
 ```bash
 source /opt/ros/foxy/setup.bash
 source /opt/autonomous_swarm_project/install/setup.bash
 ros2 run autonomous_swarm_project mission_executor
 ```
 
-#### Step 5 — Terminal 3 (Relay Node — Toba):
+#### Step 5 - Terminal 3 (Relay Node - Toba):
 ```bash
 source /opt/ros/foxy/setup.bash
 source /opt/autonomous_swarm_project/install/setup.bash
@@ -130,7 +130,7 @@ ros2 run autonomous_swarm_project relay_node
 
 ---
 
-### Toba's Contribution — Relay Node
+### Toba's Contribution - Relay Node
 
 **File:** src/autonomous_swarm_project/autonomous_swarm_project/relay_node.py
 
@@ -149,21 +149,21 @@ ros2 run autonomous_swarm_project relay_node
 - Simulated comm range limit: 50.0m
 
 **Topics published:**
-- /swarm/pose_array — both drone positions broadcast to swarm
-- /net/alerts — communication warnings and alerts
-- /diagnostics — health status of swarm communications
+- /swarm/pose_array - both drone positions broadcast to swarm
+- /net/alerts - communication warnings and alerts
+- /diagnostics - health status of swarm communications
 
-**Topics subscribed (current — raw PX4):**
+**Topics subscribed (current - raw PX4):**
 - /px4_1/fmu/out/vehicle_local_position
 - /px4_2/fmu/out/vehicle_local_position
 
-**Topics subscribed (next step — MAVROS):**
+**Topics subscribed (next step - MAVROS):**
 - /uav1/mavros/local_position/pose
 - /uav2/mavros/local_position/pose
 
 ---
 
-### MAVROS — Next Priority
+### MAVROS - Next Priority
 
 Peter confirmed MAVROS is the correct bridge between ROS2 and PX4.
 px4_ros_com is NOT needed. MAVROS is already installed in the container at:
@@ -182,7 +182,7 @@ relay_node.py will be updated to subscribe to these MAVROS topics.
 
 | Issue | Status |
 |-------|--------|
-| Drones not flying — MAVROS bridge not yet configured | Blocked — Peter to fix |
+| Drones not flying - MAVROS bridge not yet configured | Blocked - Peter to fix |
 | start_swarm.sh not yet created | Pending Peter |
 | relay_node.py topics need updating once MAVROS is live | Pending Peter's MAVROS setup |
 
@@ -220,5 +220,5 @@ relay_node.py will be updated to subscribe to these MAVROS topics.
 
 ---
 
-*Maintained by Toba — Telecommunications & Relay Infrastructure*
+*Maintained by Toba - Telecommunications & Relay Infrastructure*
 *Last updated: 23 March 2026*
