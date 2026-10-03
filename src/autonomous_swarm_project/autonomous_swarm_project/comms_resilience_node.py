@@ -2,28 +2,41 @@
 """
 comms_resilience_node.py — Toba
 Communications Resilience Node
-MSc Advanced Drone Technology — Group Project
+MSc Advanced Drone Technology — Autonomous Swarm Group Project
+University of the West of Scotland
 
-What this node does:
-  1. Monitors heartbeat from both drones
-     - Detects when a drone goes silent (obstacle/weather)
-  2. Tracks message arrival rate
-     - Slow rate = degraded link (simulates rain/storm/occlusion)
-  3. Monitors 3D separation for anti-collision
-     - WARNING at 10m, DANGER at 5m
-  4. Simulates BVLOS occlusion detection
-     - If no message for 2s = possible obstacle blocking link
-  5. Publishes comms health to /comms/health
-  6. Publishes alerts to /net/alerts
+Responsibilities:
+  1. Heartbeat monitoring — detects when a drone goes silent (obstacle/weather)
+  2. Message-rate tracking — low rate = degraded link (simulates rain/storm/occlusion)
+  3. 3D separation monitoring — WARNING at 10 m, DANGER at 5 m (anti-collision)
+  4. BVLOS occlusion detection — silence > 2 s = possible obstacle blocking link
+  5. Publishes per-drone comms health score (0.0–1.0) to /comms/<uav>/health
+  6. Publishes alerts to /net/alerts and diagnostics to /diagnostics
+
+Subscriptions:
+  /uav0/local_position/pose  (geometry_msgs/PoseStamped, BEST_EFFORT)
+  /uav1/local_position/pose  (geometry_msgs/PoseStamped, BEST_EFFORT)
+
+Publications:
+  /comms/uav0/health  (std_msgs/Float32)
+  /comms/uav1/health  (std_msgs/Float32)
+  /net/alerts         (std_msgs/String)
+  /diagnostics        (diagnostic_msgs/DiagnosticArray)
+
+Author: Oloruntoba Joseph
 """
+
+from __future__ import annotations
 
 import math
 import time
+from typing import Optional
+
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from geometry_msgs.msg import PoseStamped, PoseArray
-from std_msgs.msg import String, Float32
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Float32, String
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 
 # ── Thresholds ────────────────────────────────────────────
@@ -41,17 +54,19 @@ WEATHER_STORM    = 0.0   # <50% = severe — storm/heavy occlusion
 
 
 class CommsResilienceNode(Node):
-    def __init__(self):
+    """ROS 2 node that monitors link health and separation for a two-drone swarm."""
+
+    def __init__(self) -> None:
         super().__init__('comms_resilience_node')
 
         # ── Position storage ──────────────────────────────
-        self.uav0_pos  = None
-        self.uav1_pos  = None
+        self.uav0_pos:  Optional[PoseStamped] = None
+        self.uav1_pos:  Optional[PoseStamped] = None
 
         # ── Heartbeat tracking ────────────────────────────
         # We record the time of the last message from each drone
-        self.uav0_last_seen = None
-        self.uav1_last_seen = None
+        self.uav0_last_seen: Optional[float] = None
+        self.uav1_last_seen: Optional[float] = None
 
         # ── Message rate tracking ─────────────────────────
         # We count messages per second to estimate link quality
@@ -111,21 +126,22 @@ class CommsResilienceNode(Node):
 
     # ── Position callbacks ────────────────────────────────
 
-    def uav0_callback(self, msg):
-        """Called every time UAV0 sends a position update"""
+    def uav0_callback(self, msg: PoseStamped) -> None:
+        """Store the latest UAV0 pose and record the arrival time."""
         self.uav0_pos       = msg
-        self.uav0_last_seen = time.time()   # record when we last heard from it
-        self.uav0_msg_count += 1            # count this message
+        self.uav0_last_seen = time.time()
+        self.uav0_msg_count += 1
 
-    def uav1_callback(self, msg):
-        """Called every time UAV1 sends a position update"""
+    def uav1_callback(self, msg: PoseStamped) -> None:
+        """Store the latest UAV1 pose and record the arrival time."""
         self.uav1_pos       = msg
         self.uav1_last_seen = time.time()
         self.uav1_msg_count += 1
 
     # ── Main 10Hz loop ────────────────────────────────────
 
-    def timer_callback(self):
+    def timer_callback(self) -> None:
+        """10 Hz loop: update rates → check heartbeat → check quality → publish."""
         now = time.time()
 
         # Update message rates every second
@@ -150,7 +166,7 @@ class CommsResilienceNode(Node):
 
     # ── Message rate calculation ──────────────────────────
 
-    def update_message_rates(self, now):
+    def update_message_rates(self, now: float) -> None:
         """
         Every second, calculate how many messages arrived.
         Healthy = ~10 per second. Degraded = fewer.
@@ -175,7 +191,7 @@ class CommsResilienceNode(Node):
 
     # ── Heartbeat check (occlusion/obstacle detection) ───
 
-    def check_heartbeat(self, now):
+    def check_heartbeat(self, now: float) -> None:
         """
         If we haven't heard from a drone for OCCLUSION_TIMEOUT seconds,
         it may be behind an obstacle or out of range (BVLOS scenario).
@@ -222,7 +238,7 @@ class CommsResilienceNode(Node):
 
     # ── Link quality check (weather simulation) ──────────
 
-    def check_link_quality(self):
+    def check_link_quality(self) -> None:
         """
         Estimate link quality from message rate.
         Low rate = weather/interference degrading the link.
@@ -263,7 +279,7 @@ class CommsResilienceNode(Node):
                     f'Light interference detected.'
                 )
 
-    def get_weather_condition(self, quality):
+    def get_weather_condition(self, quality: float) -> str:
         """Classify link quality into a weather-like condition"""
         if quality >= WEATHER_CLEAR:
             return 'CLEAR'
@@ -276,7 +292,7 @@ class CommsResilienceNode(Node):
 
     # ── Anti-collision check ──────────────────────────────
 
-    def check_collision(self, distance):
+    def check_collision(self, distance: float) -> None:
         """
         UAV0 at 30m, UAV1 at 100m gives 70m natural separation.
         This monitors in case paths converge during mission.
@@ -306,7 +322,7 @@ class CommsResilienceNode(Node):
 
     # ── Publish health scores ─────────────────────────────
 
-    def publish_health(self):
+    def publish_health(self) -> None:
         """Publish link quality 0.0-1.0 for each drone"""
         msg0 = Float32()
         msg0.data = float(self.uav0_link_quality)
@@ -318,7 +334,7 @@ class CommsResilienceNode(Node):
 
     # ── Publish alert helper ──────────────────────────────
 
-    def publish_alert(self, message):
+    def publish_alert(self, message: str) -> None:
         msg = String()
         msg.data = message
         self.alert_pub.publish(msg)
@@ -326,7 +342,7 @@ class CommsResilienceNode(Node):
 
     # ── Publish diagnostics ───────────────────────────────
 
-    def publish_diagnostics(self, distance):
+    def publish_diagnostics(self, distance: Optional[float]) -> None:
         diag_array = DiagnosticArray()
         diag_array.header.stamp = self.get_clock().now().to_msg()
 
@@ -371,7 +387,8 @@ class CommsResilienceNode(Node):
 
     # ── 3D distance calculation ───────────────────────────
 
-    def get_distance(self, pos1, pos2):
+    def get_distance(self, pos1: PoseStamped, pos2: PoseStamped) -> float:
+        """Return the Euclidean distance in metres between two PoseStamped positions."""
         return math.sqrt(
             (pos1.pose.position.x - pos2.pose.position.x) ** 2 +
             (pos1.pose.position.y - pos2.pose.position.y) ** 2 +

@@ -2,30 +2,48 @@
 """
 cyber_defence_node.py — Toba
 Cyber Defence Node
-MSc Advanced Drone Technology — Group Project
+MSc Advanced Drone Technology — Autonomous Swarm Group Project
+University of the West of Scotland
 
-Defends against Craig's attacks:
-  1. Packet loss injection  — detects sudden message rate drop
-  2. Communication jamming  — detects sudden total silence
-  3. Spoofed positions      — physics check, impossible jumps rejected
-  4. Topic flooding / DoS   — detects abnormally high message rate
-  5. HMAC message signing   — flags unsigned/invalid messages
+Defends the swarm against adversarial attacks in real time:
+  1. Packet loss injection  — detects a sudden drop in message rate
+  2. Communication jamming  — detects prolonged silence on a previously healthy link
+  3. Spoofed positions      — physics-based check rejects physically impossible jumps
+  4. Topic flooding / DoS   — detects abnormally high message rate (>50 Hz)
+  5. Fake pose broadcasts   — cross-validates /swarm/pose_array against MAVROS positions
+  6. HMAC message signing   — provides signature primitives; flags unsigned messages
 
-Publishes:
-  /cyber/alerts             — attack detection alerts
-  /cyber/status             — current threat level (SAFE/WARNING/CRITICAL)
-  /net/alerts               — shared alert bus (whole swarm sees this)
-  /diagnostics              — ROS2 diagnostics panel
+Subscriptions:
+  /uav0/local_position/pose  (geometry_msgs/PoseStamped, BEST_EFFORT)
+  /uav1/local_position/pose  (geometry_msgs/PoseStamped, BEST_EFFORT)
+  /swarm/pose_array          (geometry_msgs/PoseArray, default QoS)
+
+Publications:
+  /cyber/alerts   (std_msgs/String)  — per-event attack alerts
+  /cyber/status   (std_msgs/String)  — current threat level summary
+  /net/alerts     (std_msgs/String)  — shared swarm alert bus
+  /diagnostics    (diagnostic_msgs/DiagnosticArray)
+
+Threat levels: SAFE → WARNING → CRITICAL
+  CRITICAL: DoS flood, position spoof, jamming, or fake broadcast detected
+  WARNING : Packet loss injection detected (rate below threshold)
+  SAFE    : All checks passing
+
+Author: Oloruntoba Joseph
 """
 
+from __future__ import annotations
+
+import hashlib
+import hmac
 import math
 import time
-import hmac
-import hashlib
+from typing import List, Optional
+
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from geometry_msgs.msg import PoseStamped, PoseArray
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from geometry_msgs.msg import PoseArray, PoseStamped
 from std_msgs.msg import String
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 
@@ -56,16 +74,18 @@ THREAT_CRITICAL = 'CRITICAL'
 
 
 class CyberDefenceNode(Node):
-    def __init__(self):
+    """ROS 2 node that monitors swarm communications for adversarial activity."""
+
+    def __init__(self) -> None:
         super().__init__('cyber_defence_node')
 
         # ── Position storage ──────────────────────────────
-        self.uav0_pos_prev  = None   # previous position (for physics check)
-        self.uav1_pos_prev  = None
-        self.uav0_pos_curr  = None   # current position
-        self.uav1_pos_curr  = None
-        self.uav0_last_time = None   # time of last message
-        self.uav1_last_time = None
+        self.uav0_pos_prev:  Optional[PoseStamped] = None  # previous position (for physics check)
+        self.uav1_pos_prev:  Optional[PoseStamped] = None
+        self.uav0_pos_curr:  Optional[PoseStamped] = None  # current position
+        self.uav1_pos_curr:  Optional[PoseStamped] = None
+        self.uav0_last_time: Optional[float] = None        # wall-clock time of last message
+        self.uav1_last_time: Optional[float] = None
 
         # ── Message rate tracking ─────────────────────────
         self.uav0_msg_count  = 0
@@ -80,8 +100,8 @@ class CyberDefenceNode(Node):
         self.uav1_was_healthy = False
 
         # ── Threat tracking ───────────────────────────────
-        self.threat_level    = THREAT_SAFE
-        self.active_attacks  = []   # list of currently detected attacks
+        self.threat_level:   str        = THREAT_SAFE
+        self.active_attacks: List[str]  = []  # attack types raised this cycle
 
         # ── Spoofing counters ─────────────────────────────
         self.uav0_spoof_count = 0
@@ -140,7 +160,8 @@ class CyberDefenceNode(Node):
 
     # ── Position callbacks ────────────────────────────────
 
-    def uav0_callback(self, msg):
+    def uav0_callback(self, msg: PoseStamped) -> None:
+        """Receive UAV0 pose; run DoS and spoof checks before accepting."""
         now = time.time()
         self.uav0_msg_count += 1
 
@@ -174,7 +195,8 @@ class CyberDefenceNode(Node):
         self.uav0_pos_curr  = msg
         self.uav0_last_time = now
 
-    def uav1_callback(self, msg):
+    def uav1_callback(self, msg: PoseStamped) -> None:
+        """Receive UAV1 pose; run DoS and spoof checks before accepting."""
         now = time.time()
         self.uav1_msg_count += 1
 
@@ -204,7 +226,7 @@ class CyberDefenceNode(Node):
         self.uav1_pos_curr  = msg
         self.uav1_last_time = now
 
-    def pose_array_callback(self, msg):
+    def pose_array_callback(self, msg: PoseArray) -> None:
         """
         Monitor /swarm/pose_array for fake broadcasts.
         If it contains more than 2 drones, something is wrong.
@@ -233,7 +255,8 @@ class CyberDefenceNode(Node):
 
     # ── Main 10Hz loop ────────────────────────────────────
 
-    def timer_callback(self):
+    def timer_callback(self) -> None:
+        """10 Hz monitoring loop: rate update → jamming/loss check → status publish."""
         now = time.time()
 
         # Update message rates
@@ -251,7 +274,8 @@ class CyberDefenceNode(Node):
 
     # ── Message rate calculation ──────────────────────────
 
-    def update_message_rates(self, now):
+    def update_message_rates(self, now: float) -> None:
+        """Compute per-drone message rates over the last second and reset counters."""
         elapsed = now - self.last_rate_check
         if elapsed >= 1.0:
             self.uav0_rate_hz    = self.uav0_msg_count / elapsed
@@ -262,7 +286,7 @@ class CyberDefenceNode(Node):
 
     # ── Jamming and packet loss detection ─────────────────
 
-    def check_jamming_and_packet_loss(self, now):
+    def check_jamming_and_packet_loss(self, now: float) -> None:
         """
         Jamming  = link was healthy, now totally silent
         Packet loss = link was healthy, now severely degraded
@@ -306,7 +330,12 @@ class CyberDefenceNode(Node):
 
     # ── Physics-based spoof detection ────────────────────
 
-    def is_position_spoofed(self, prev_msg, curr_msg, dt):
+    def is_position_spoofed(
+        self,
+        prev_msg: PoseStamped,
+        curr_msg: PoseStamped,
+        dt: float,
+    ) -> bool:
         """
         Calculate how fast the drone would have to move
         to get from prev position to curr position in dt seconds.
@@ -336,25 +365,35 @@ class CyberDefenceNode(Node):
 
     def generate_hmac(self, message: str) -> str:
         """
-        Generate an HMAC signature for a message.
-        In a real system, outgoing messages would be signed,
-        and incoming messages verified against this signature.
-        Craig cannot fake this without knowing HMAC_SECRET.
+        Generate an HMAC-SHA256 signature for *message*.
+
+        In deployment, outgoing messages are signed with this digest and
+        incoming messages are verified against it.  An attacker cannot
+        forge a valid signature without knowing ``HMAC_SECRET``.
+
+        Args:
+            message: Plaintext payload to sign.
+
+        Returns:
+            Lowercase hex-encoded HMAC-SHA256 digest string.
         """
         return hmac.new(
             HMAC_SECRET,
-            message.encode(),
-            hashlib.sha256
+            message.encode('utf-8'),
+            hashlib.sha256,
         ).hexdigest()
 
     def verify_hmac(self, message: str, signature: str) -> bool:
-        """Verify an incoming message's HMAC signature"""
+        """Return True if *signature* matches the HMAC of *message*.
+
+        Uses :func:`hmac.compare_digest` to prevent timing-oracle attacks.
+        """
         expected = self.generate_hmac(message)
         return hmac.compare_digest(expected, signature)
 
     # ── Threat level management ───────────────────────────
 
-    def raise_attack(self, attack_type, message, level):
+    def raise_attack(self, attack_type: str, message: str, level: str) -> None:
         """Record and broadcast a detected attack"""
         full_msg = f'[CYBER_DEFENCE] {attack_type}: {message}'
 
@@ -372,7 +411,7 @@ class CyberDefenceNode(Node):
 
         self.get_logger().error(full_msg)
 
-    def update_threat_level(self):
+    def update_threat_level(self) -> None:
         """Update overall threat level based on active attacks"""
         critical_attacks = [
             'DOS_ATTACK', 'SPOOF_DETECTED',
@@ -393,7 +432,7 @@ class CyberDefenceNode(Node):
 
     # ── Publish status ────────────────────────────────────
 
-    def publish_status(self):
+    def publish_status(self) -> None:
         msg = String()
         msg.data = (
             f'THREAT_LEVEL={self.threat_level} | '
@@ -412,7 +451,7 @@ class CyberDefenceNode(Node):
 
     # ── Publish diagnostics ───────────────────────────────
 
-    def publish_diagnostics(self):
+    def publish_diagnostics(self) -> None:
         diag_array = DiagnosticArray()
         diag_array.header.stamp = self.get_clock().now().to_msg()
 
